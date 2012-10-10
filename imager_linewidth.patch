@@ -1,0 +1,177 @@
+diff -rupN Imager-0.92/Imager.pm Imager-0.92-mod2/Imager.pm
+--- Imager-0.92/Imager.pm	2012-08-14 18:33:54.000000000 +0900
++++ Imager-0.92-mod2/Imager.pm	2012-10-10 13:00:49.000000000 +0900
+@@ -2909,7 +2909,7 @@ sub line {
+               $color, $opts{endp});
+   } else {
+     i_line($self->{IMG},$opts{x1}, $opts{y1}, $opts{x2}, $opts{y2},
+-           $color, $opts{endp});
++           $color, $opts{endp}, ($opts{line_width} || 1));
+   }
+   return $self;
+ }
+@@ -2948,7 +2948,7 @@ sub polyline {
+   } else {
+     for $pt(@points) {
+       if (defined($ls)) { 
+-        i_line($self->{IMG},$ls->[0],$ls->[1],$pt->[0],$pt->[1],$color,1);
++        i_line($self->{IMG},$ls->[0],$ls->[1],$pt->[0],$pt->[1],$color,1, ($opts{line_width} || 1));
+       }
+       $ls=$pt;
+     }
+diff -rupN Imager-0.92/Imager.xs Imager-0.92-mod2/Imager.xs
+--- Imager-0.92/Imager.xs	2012-08-14 14:10:25.000000000 +0900
++++ Imager-0.92-mod2/Imager.xs	2012-10-10 13:00:49.000000000 +0900
+@@ -1509,7 +1509,7 @@ i_img_is_monochrome(im)
+ 	}
+ 
+ void
+-i_line(im,x1,y1,x2,y2,val,endp)
++i_line(im,x1,y1,x2,y2,val,endp,line_wid)
+     Imager::ImgRaw     im
+ 	       i_img_dim     x1
+ 	       i_img_dim     y1
+@@ -1517,6 +1517,7 @@ i_line(im,x1,y1,x2,y2,val,endp)
+ 	       i_img_dim     y2
+      Imager::Color     val
+ 	       int     endp
++	       unsigned int line_wid
+ 
+ void
+ i_line_aa(im,x1,y1,x2,y2,val,endp)
+diff -rupN Imager-0.92/draw.c Imager-0.92-mod2/draw.c
+--- Imager-0.92/draw.c	2012-08-14 14:10:25.000000000 +0900
++++ Imager-0.92-mod2/draw.c	2012-10-10 13:00:13.000000000 +0900
+@@ -1223,7 +1223,7 @@ i_box_cfill(i_img *im,i_img_dim x1,i_img
+ }
+ 
+ /* 
+-=item i_line(C<im>, C<x1>, C<y1>, C<x2>, C<y2>, C<color>, C<endp>)
++=item i_line(C<im>, C<x1>, C<y1>, C<x2>, C<y2>, C<color>, C<endp>, C<line_width>)
+ 
+ =category Drawing
+ 
+@@ -1243,17 +1243,20 @@ Draw a line to image using Bresenham's l
+ */
+ 
+ void
+-i_line(i_img *im, i_img_dim x1, i_img_dim y1, i_img_dim x2, i_img_dim y2, const i_color *val, int endp) {
++i_line(i_img *im, i_img_dim x1, i_img_dim y1, i_img_dim x2, i_img_dim y2, const i_color *val, int endp, unsigned int line_wid) {
+   i_img_dim x, y;
+   i_img_dim dx, dy;
+   i_img_dim p;
++  unsigned int iterate_x;
++  unsigned int w_it, wstart;
+ 
+   dx = x2 - x1;
+   dy = y2 - y1;
+ 
+ 
+   /* choose variable to iterate on */
+-  if (i_abs(dx) > i_abs(dy)) {
++  iterate_x = (i_abs(dx) > i_abs(dy));
++  if (iterate_x) {
+     i_img_dim dx2, dy2, cpy;
+ 
+     /* sort by x */
+@@ -1285,7 +1288,12 @@ i_line(i_img *im, i_img_dim x1, i_img_di
+         y += cpy;
+         p += dy2-dx2;
+       }
+-      i_ppix(im, x+1, y, val);
++
++      /* Setup for line width */
++      wstart = y - line_wid / 2;
++      for(w_it=wstart; w_it<wstart+line_wid; w_it++) {
++        i_ppix(im, x+1, w_it, val);
++      }
+     }
+   } else {
+     i_img_dim dy2, dx2, cpx;
+@@ -1319,15 +1327,48 @@ i_line(i_img *im, i_img_dim x1, i_img_di
+         x += cpx;
+         p += dx2-dy2;
+       }
+-      i_ppix(im, x, y+1, val);
++
++      /* Setup for line width */
++      wstart = x - line_wid / 2;
++      for(w_it=wstart; w_it<wstart+line_wid; w_it++) {
++        i_ppix(im, w_it, y+1, val);
++      }
+     }
+   }
+   if (endp) {
+-    i_ppix(im, x1, y1, val);
+-    i_ppix(im, x2, y2, val);
++    if (iterate_x) {
++      wstart = y1 - line_wid / 2;
++      for(w_it=wstart; w_it<wstart+line_wid; w_it++) {
++        i_ppix(im, x1, w_it, val);
++      }
++      wstart = y2 - line_wid / 2;
++      for(w_it=wstart; w_it<wstart+line_wid; w_it++) {
++        i_ppix(im, x2, w_it, val);
++      }
++    } else {
++      wstart = x1 - line_wid / 2;
++      for(w_it=wstart; w_it<wstart+line_wid; w_it++) {
++        i_ppix(im, w_it, y1, val);
++      }
++      wstart = x2 - line_wid / 2;
++      for(w_it=wstart; w_it<wstart+line_wid; w_it++) {
++        i_ppix(im, w_it, y2, val);
++      }
++    }
+   } else {
+-    if (x1 != x2 || y1 != y2) 
+-      i_ppix(im, x1, y1, val);
++    if (x1 != x2 || y1 != y2) {
++      if (iterate_x) {
++        wstart = y1 - line_wid / 2;
++        for(w_it=wstart; w_it<wstart+line_wid; w_it++) {
++          i_ppix(im, x1, w_it, val);
++        }
++      } else {
++        wstart = x1 - line_wid / 2;
++        for(w_it=wstart; w_it<wstart+line_wid; w_it++) {
++          i_ppix(im, w_it, y1, val);
++        }
++      }
++    }
+   }
+ }
+ 
+diff -rupN Imager-0.92/imager.h Imager-0.92-mod2/imager.h
+--- Imager-0.92/imager.h	2012-08-14 14:10:25.000000000 +0900
++++ Imager-0.92-mod2/imager.h	2012-10-10 13:00:27.000000000 +0900
+@@ -164,7 +164,7 @@ void i_box         (i_img *im,i_img_dim 
+ void i_box_filled  (i_img *im,i_img_dim x1,i_img_dim y1,i_img_dim x2,i_img_dim y2,const i_color *val);
+ int i_box_filledf  (i_img *im,i_img_dim x1,i_img_dim y1,i_img_dim x2,i_img_dim y2,const i_fcolor *val);
+ void i_box_cfill(i_img *im, i_img_dim x1, i_img_dim y1, i_img_dim x2, i_img_dim y2, i_fill_t *fill);
+-void i_line        (i_img *im,i_img_dim x1,i_img_dim y1,i_img_dim x2,i_img_dim y2,const i_color *val, int endp);
++void i_line        (i_img *im,i_img_dim x1,i_img_dim y1,i_img_dim x2,i_img_dim y2,const i_color *val, int endp, unsigned int line_wid);
+ void i_line_aa     (i_img *im,i_img_dim x1,i_img_dim y1,i_img_dim x2,i_img_dim y2,const i_color *val, int endp);
+ void i_arc         (i_img *im,i_img_dim x,i_img_dim y,double rad,double d1,double d2,const i_color *val);
+ int i_arc_out(i_img *im,i_img_dim x,i_img_dim y,i_img_dim rad,double d1,double d2,const i_color *val);
+@@ -353,7 +353,7 @@ typedef struct {
+   int (*i_gpix)(i_img *im,i_img_dim x,i_img_dim y,i_color *val);
+   */
+   void(*i_box)(i_img *im,i_img_dim x1,i_img_dim y1,i_img_dim x2,i_img_dim y2,const i_color *val);
+-  void(*i_line)(i_img *im,i_img_dim x1,i_img_dim y1,i_img_dim x2,i_img_dim y2,const i_color *val,int endp);
++  void(*i_line)(i_img *im,i_img_dim x1,i_img_dim y1,i_img_dim x2,i_img_dim y2,const i_color *val,int endp, unsigned int line_wid);
+   void(*i_arc)(i_img *im,i_img_dim x,i_img_dim y,double rad,double d1,double d2,const i_color *val);
+   void(*i_copyto)(i_img *im,i_img *src,i_img_dim x1,i_img_dim y1,i_img_dim x2,i_img_dim y2,i_img_dim tx,i_img_dim ty);
+   void(*i_copyto_trans)(i_img *im,i_img *src,i_img_dim x1,i_img_dim y1,i_img_dim x2,i_img_dim y2,i_img_dim tx,i_img_dim ty,const i_color *trans);
+diff -rupN Imager-0.92/imext.h Imager-0.92-mod2/imext.h
+--- Imager-0.92/imext.h	2012-08-14 14:10:25.000000000 +0900
++++ Imager-0.92-mod2/imext.h	2012-10-10 13:00:49.000000000 +0900
+@@ -174,7 +174,7 @@ extern im_ext_funcs *imager_function_ext
+ #define i_box(im, x1, y1, x2, y2, val) ((im_extt->f_i_box)((im), (x1), (y1), (x2), (y2), (val)))
+ #define i_box_filled(im, x1, y1, x2, y2, val) ((im_extt->f_i_box_filled)((im), (x1), (y1), (x2), (y2), (val)))
+ #define i_box_cfill(im, x1, y1, x2, y2, fill) ((im_extt->f_i_box_cfill)((im), (x1), (y1), (x2), (y2), (fill)))
+-#define i_line(im, x1, y1, x2, y2, val, endp) ((im_extt->f_i_line)((im), (x1), (y1), (x2), (y2), (val), (endp)))
++#define i_line(im, x1, y1, x2, y2, val, endp, line_wid) ((im_extt->f_i_line)((im), (x1), (y1), (x2), (y2), (val), (endp), (line_wid)))
+ #define i_line_aa(im, x1, y1, x2, y2, val, endp) ((im_extt->f_i_line_aa)((im), (x1), (y1), (x2), (y2), (val), (endp)))
+ #define i_arc(im, x, y, rad, d1, d2, val) ((im_extt->f_i_arc)((im), (x), (y), (rad), (d1), (d2), (val)))
+ #define i_arc_aa(im, x, y, rad, d1, d2, val) ((im_extt->f_i_arc_aa)((im), (x), (y), (rad), (d1), (d2), (val)))
