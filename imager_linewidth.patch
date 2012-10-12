@@ -1,6 +1,6 @@
-diff -rupN Imager-0.92/Imager.pm Imager-0.92-mod2/Imager.pm
---- Imager-0.92/Imager.pm	2012-08-14 18:33:54.000000000 +0900
-+++ Imager-0.92-mod2/Imager.pm	2012-10-10 13:00:49.000000000 +0900
+diff -rupN imager/Imager.pm imager-patched/Imager.pm
+--- imager/Imager.pm	2012-10-12 16:39:39.000000000 +0900
++++ imager-patched/Imager.pm	2012-10-12 16:34:22.000000000 +0900
 @@ -2909,7 +2909,7 @@ sub line {
                $color, $opts{endp});
    } else {
@@ -19,9 +19,9 @@ diff -rupN Imager-0.92/Imager.pm Imager-0.92-mod2/Imager.pm
        }
        $ls=$pt;
      }
-diff -rupN Imager-0.92/Imager.xs Imager-0.92-mod2/Imager.xs
---- Imager-0.92/Imager.xs	2012-08-14 14:10:25.000000000 +0900
-+++ Imager-0.92-mod2/Imager.xs	2012-10-10 13:00:49.000000000 +0900
+diff -rupN imager/Imager.xs imager-patched/Imager.xs
+--- imager/Imager.xs	2012-10-12 16:39:39.000000000 +0900
++++ imager-patched/Imager.xs	2012-10-12 16:34:22.000000000 +0900
 @@ -1509,7 +1509,7 @@ i_img_is_monochrome(im)
  	}
  
@@ -39,9 +39,9 @@ diff -rupN Imager-0.92/Imager.xs Imager-0.92-mod2/Imager.xs
  
  void
  i_line_aa(im,x1,y1,x2,y2,val,endp)
-diff -rupN Imager-0.92/draw.c Imager-0.92-mod2/draw.c
---- Imager-0.92/draw.c	2012-08-14 14:10:25.000000000 +0900
-+++ Imager-0.92-mod2/draw.c	2012-10-10 13:00:13.000000000 +0900
+diff -rupN imager/draw.c imager-patched/draw.c
+--- imager/draw.c	2012-10-12 16:39:39.000000000 +0900
++++ imager-patched/draw.c	2012-10-12 16:35:23.000000000 +0900
 @@ -1223,7 +1223,7 @@ i_box_cfill(i_img *im,i_img_dim x1,i_img
  }
  
@@ -51,9 +51,28 @@ diff -rupN Imager-0.92/draw.c Imager-0.92-mod2/draw.c
  
  =category Drawing
  
-@@ -1243,17 +1243,20 @@ Draw a line to image using Bresenham's l
+@@ -1242,18 +1242,38 @@ Draw a line to image using Bresenham's l
+ =cut
  */
  
++#define __i_x_wide_ppix(im, x, y, val, line_width)             \
++    do {                                                       \
++      unsigned int w_it;                                       \
++      unsigned int wstart = (x) - (line_width) / 2;            \
++      for(w_it=wstart; w_it<wstart+(line_width); w_it++) {     \
++          i_ppix((im), w_it, (y), (val));                      \
++      }                                                        \
++    } while (0)
++#define __i_y_wide_ppix(im, x, y, val, line_width)             \
++    do {                                                       \
++      unsigned int w_it;                                       \
++      unsigned int wstart = (y) - (line_width) / 2;            \
++      for(w_it=wstart; w_it<wstart+(line_width); w_it++) {     \
++          i_ppix((im), (x), w_it, (val));                      \
++      }                                                        \
++    } while (0)
++      
++
  void
 -i_line(i_img *im, i_img_dim x1, i_img_dim y1, i_img_dim x2, i_img_dim y2, const i_color *val, int endp) {
 +i_line(i_img *im, i_img_dim x1, i_img_dim y1, i_img_dim x2, i_img_dim y2, const i_color *val, int endp, unsigned int line_wid) {
@@ -61,7 +80,6 @@ diff -rupN Imager-0.92/draw.c Imager-0.92-mod2/draw.c
    i_img_dim dx, dy;
    i_img_dim p;
 +  unsigned int iterate_x;
-+  unsigned int w_it, wstart;
  
    dx = x2 - x1;
    dy = y2 - y1;
@@ -74,78 +92,52 @@ diff -rupN Imager-0.92/draw.c Imager-0.92-mod2/draw.c
      i_img_dim dx2, dy2, cpy;
  
      /* sort by x */
-@@ -1285,7 +1288,12 @@ i_line(i_img *im, i_img_dim x1, i_img_di
+@@ -1285,7 +1305,8 @@ i_line(i_img *im, i_img_dim x1, i_img_di
          y += cpy;
          p += dy2-dx2;
        }
 -      i_ppix(im, x+1, y, val);
 +
-+      /* Setup for line width */
-+      wstart = y - line_wid / 2;
-+      for(w_it=wstart; w_it<wstart+line_wid; w_it++) {
-+        i_ppix(im, x+1, w_it, val);
-+      }
++      __i_y_wide_ppix(im, x+1, y, val, line_wid);
      }
    } else {
      i_img_dim dy2, dx2, cpx;
-@@ -1319,15 +1327,48 @@ i_line(i_img *im, i_img_dim x1, i_img_di
+@@ -1319,15 +1340,26 @@ i_line(i_img *im, i_img_dim x1, i_img_di
          x += cpx;
          p += dx2-dy2;
        }
 -      i_ppix(im, x, y+1, val);
 +
-+      /* Setup for line width */
-+      wstart = x - line_wid / 2;
-+      for(w_it=wstart; w_it<wstart+line_wid; w_it++) {
-+        i_ppix(im, w_it, y+1, val);
-+      }
++      __i_x_wide_ppix(im, x, y+1, val, line_wid);
      }
    }
    if (endp) {
 -    i_ppix(im, x1, y1, val);
 -    i_ppix(im, x2, y2, val);
 +    if (iterate_x) {
-+      wstart = y1 - line_wid / 2;
-+      for(w_it=wstart; w_it<wstart+line_wid; w_it++) {
-+        i_ppix(im, x1, w_it, val);
-+      }
-+      wstart = y2 - line_wid / 2;
-+      for(w_it=wstart; w_it<wstart+line_wid; w_it++) {
-+        i_ppix(im, x2, w_it, val);
-+      }
++      __i_y_wide_ppix(im, x1, y1, val, line_wid);
++      __i_y_wide_ppix(im, x2, y2, val, line_wid);
 +    } else {
-+      wstart = x1 - line_wid / 2;
-+      for(w_it=wstart; w_it<wstart+line_wid; w_it++) {
-+        i_ppix(im, w_it, y1, val);
-+      }
-+      wstart = x2 - line_wid / 2;
-+      for(w_it=wstart; w_it<wstart+line_wid; w_it++) {
-+        i_ppix(im, w_it, y2, val);
-+      }
++      __i_x_wide_ppix(im, x1, y1, val, line_wid);
++      __i_x_wide_ppix(im, x2, y2, val, line_wid);
 +    }
    } else {
 -    if (x1 != x2 || y1 != y2) 
 -      i_ppix(im, x1, y1, val);
 +    if (x1 != x2 || y1 != y2) {
 +      if (iterate_x) {
-+        wstart = y1 - line_wid / 2;
-+        for(w_it=wstart; w_it<wstart+line_wid; w_it++) {
-+          i_ppix(im, x1, w_it, val);
-+        }
++        __i_y_wide_ppix(im, x1, y1, val, line_wid);
 +      } else {
-+        wstart = x1 - line_wid / 2;
-+        for(w_it=wstart; w_it<wstart+line_wid; w_it++) {
-+          i_ppix(im, w_it, y1, val);
-+        }
++        __i_x_wide_ppix(im, x1, y1, val, line_wid);
 +      }
 +    }
    }
  }
  
-diff -rupN Imager-0.92/imager.h Imager-0.92-mod2/imager.h
---- Imager-0.92/imager.h	2012-08-14 14:10:25.000000000 +0900
-+++ Imager-0.92-mod2/imager.h	2012-10-10 13:00:27.000000000 +0900
-@@ -164,7 +164,7 @@ void i_box         (i_img *im,i_img_dim 
+diff -rupN imager/imager.h imager-patched/imager.h
+--- imager/imager.h	2012-10-12 16:39:39.000000000 +0900
++++ imager-patched/imager.h	2012-10-12 16:34:22.000000000 +0900
+@@ -164,7 +164,7 @@ void i_box         (i_img *im,i_img_dim
  void i_box_filled  (i_img *im,i_img_dim x1,i_img_dim y1,i_img_dim x2,i_img_dim y2,const i_color *val);
  int i_box_filledf  (i_img *im,i_img_dim x1,i_img_dim y1,i_img_dim x2,i_img_dim y2,const i_fcolor *val);
  void i_box_cfill(i_img *im, i_img_dim x1, i_img_dim y1, i_img_dim x2, i_img_dim y2, i_fill_t *fill);
@@ -163,9 +155,9 @@ diff -rupN Imager-0.92/imager.h Imager-0.92-mod2/imager.h
    void(*i_arc)(i_img *im,i_img_dim x,i_img_dim y,double rad,double d1,double d2,const i_color *val);
    void(*i_copyto)(i_img *im,i_img *src,i_img_dim x1,i_img_dim y1,i_img_dim x2,i_img_dim y2,i_img_dim tx,i_img_dim ty);
    void(*i_copyto_trans)(i_img *im,i_img *src,i_img_dim x1,i_img_dim y1,i_img_dim x2,i_img_dim y2,i_img_dim tx,i_img_dim ty,const i_color *trans);
-diff -rupN Imager-0.92/imext.h Imager-0.92-mod2/imext.h
---- Imager-0.92/imext.h	2012-08-14 14:10:25.000000000 +0900
-+++ Imager-0.92-mod2/imext.h	2012-10-10 13:00:49.000000000 +0900
+diff -rupN imager/imext.h imager-patched/imext.h
+--- imager/imext.h	2012-10-12 16:39:39.000000000 +0900
++++ imager-patched/imext.h	2012-10-12 16:34:22.000000000 +0900
 @@ -174,7 +174,7 @@ extern im_ext_funcs *imager_function_ext
  #define i_box(im, x1, y1, x2, y2, val) ((im_extt->f_i_box)((im), (x1), (y1), (x2), (y2), (val)))
  #define i_box_filled(im, x1, y1, x2, y2, val) ((im_extt->f_i_box_filled)((im), (x1), (y1), (x2), (y2), (val)))
