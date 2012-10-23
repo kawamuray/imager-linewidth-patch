@@ -1,0 +1,4 @@
+my $img = Imager->new(xsize => 100, ysize => 100);
+$img->line(x1 => 10, y1 => 10, x2 => 20, y2 => 20, line_width => 5); #px
+
+とかできるようになる．超適当．
